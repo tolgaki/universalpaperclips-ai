@@ -1,14 +1,14 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using UniversalPaperclipsAI.Core;
+using UniversalPaperclipsAI.Utilities;
 
 namespace UniversalPaperclipsAI.Browser;
 
 /// <summary>
 /// Manages Playwright browser instance for game automation.
 /// </summary>
-public sealed partial class BrowserController : IAsyncDisposable
+public class BrowserController : IAsyncDisposable
 {
     // Configuration constants (Issue #7)
     private const int DefaultSlowMoMs = 50;
@@ -104,7 +104,7 @@ public sealed partial class BrowserController : IAsyncDisposable
     /// </summary>
     /// <param name="selector">CSS selector for the element.</param>
     /// <returns>True if click succeeded, false otherwise.</returns>
-    public async Task<bool> ClickAsync(string selector)
+    public virtual async Task<bool> ClickAsync(string selector)
     {
         try
         {
@@ -131,7 +131,7 @@ public sealed partial class BrowserController : IAsyncDisposable
     /// </summary>
     /// <param name="selector">CSS selector for the element.</param>
     /// <returns>True if click succeeded, false otherwise.</returns>
-    public async Task<bool> ClickIfEnabledAsync(string selector)
+    public virtual async Task<bool> ClickIfEnabledAsync(string selector)
     {
         try
         {
@@ -168,7 +168,7 @@ public sealed partial class BrowserController : IAsyncDisposable
     /// <param name="selector">CSS selector for the slider.</param>
     /// <param name="value">Value to set.</param>
     /// <returns>True if succeeded, false otherwise.</returns>
-    public async Task<bool> SetSliderAsync(string selector, int value)
+    public virtual async Task<bool> SetSliderAsync(string selector, int value)
     {
         try
         {
@@ -209,9 +209,9 @@ public sealed partial class BrowserController : IAsyncDisposable
     /// <param name="css">CSS styles for the overlay.</param>
     public async Task InjectOverlayAsync(string html, string css)
     {
-        // Sanitize inputs to prevent XSS (Issue #4)
-        var safeHtml = SanitizeForJavaScript(html);
-        var safeCss = SanitizeForJavaScript(css);
+        // Sanitize inputs to prevent XSS
+        var safeHtml = StringSanitizer.EscapeForJavaScript(html);
+        var safeCss = StringSanitizer.EscapeForJavaScript(css);
 
         await Page.EvaluateAsync(@"({html, css}) => {
             // Remove existing overlay
@@ -240,7 +240,7 @@ public sealed partial class BrowserController : IAsyncDisposable
     public async Task UpdateOverlayContentAsync(string elementId, string content)
     {
         // Only sanitize the element ID to prevent injection
-        var safeElementId = SanitizeElementId(elementId);
+        var safeElementId = StringSanitizer.SanitizeElementId(elementId);
 
         await Page.EvaluateAsync(@"({elementId, content}) => {
             const el = document.getElementById(elementId);
@@ -255,57 +255,14 @@ public sealed partial class BrowserController : IAsyncDisposable
     /// <param name="text">Text content (will be HTML-escaped).</param>
     public async Task UpdateOverlayTextAsync(string elementId, string text)
     {
-        var safeElementId = SanitizeElementId(elementId);
-        var safeText = SanitizeHtml(text);
+        var safeElementId = StringSanitizer.SanitizeElementId(elementId);
+        var safeText = StringSanitizer.EscapeHtml(text);
 
         await Page.EvaluateAsync(@"({elementId, text}) => {
             const el = document.getElementById(elementId);
             if (el) el.textContent = text;
         }", new { elementId = safeElementId, text = safeText });
     }
-
-    /// <summary>
-    /// Sanitizes a string for safe use in JavaScript template literals.
-    /// </summary>
-    private static string SanitizeForJavaScript(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return string.Empty;
-
-        return input
-            .Replace("\\", "\\\\")
-            .Replace("`", "\\`")
-            .Replace("${", "\\${");
-    }
-
-    /// <summary>
-    /// Sanitizes HTML content to prevent XSS.
-    /// </summary>
-    private static string SanitizeHtml(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return string.Empty;
-
-        // Basic HTML entity encoding for dangerous characters
-        return input
-            .Replace("&", "&amp;")
-            .Replace("<", "&lt;")
-            .Replace(">", "&gt;")
-            .Replace("\"", "&quot;")
-            .Replace("'", "&#39;");
-    }
-
-    /// <summary>
-    /// Sanitizes an element ID to contain only valid characters.
-    /// </summary>
-    private static string SanitizeElementId(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return string.Empty;
-
-        // Only allow alphanumeric, hyphen, and underscore
-        return ElementIdRegex().Replace(input, "");
-    }
-
-    [GeneratedRegex("[^a-zA-Z0-9_-]")]
-    private static partial Regex ElementIdRegex();
 
     public async ValueTask DisposeAsync()
     {

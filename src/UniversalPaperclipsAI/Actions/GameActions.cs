@@ -54,8 +54,8 @@ public static class GameActions
 
     public static IEnumerable<string> GetActionNames() => All.Keys;
 
-    public static GameActionDefinition? Get(string name) =>
-        All.TryGetValue(name, out var action) ? action : null;
+    public static GameActionDefinition? Get(string? name) =>
+        name != null && All.TryGetValue(name, out var action) ? action : null;
 }
 
 public record GameActionDefinition(

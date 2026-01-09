@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace UniversalPaperclipsAI.GameState;
 
 /// <summary>
@@ -8,59 +10,32 @@ public sealed class EventDetector
     private GameStateSnapshot? _previousState;
     private DateTime _lastDecisionTime = DateTime.MinValue;
     private readonly int _decisionIntervalMs;
+    private readonly ILogger<EventDetector>? _logger;
 
-    public EventDetector(int decisionIntervalMs = 3000)
+    /// <summary>
+    /// Initializes a new instance of the EventDetector.
+    /// </summary>
+    /// <param name="decisionIntervalMs">Minimum interval between scheduled decisions.</param>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public EventDetector(int decisionIntervalMs = 3000, ILogger<EventDetector>? logger = null)
     {
         _decisionIntervalMs = decisionIntervalMs;
+        _logger = logger;
     }
 
+    /// <summary>
+    /// Determines if a decision should be triggered based on the current game state.
+    /// Updates internal state if a decision is triggered.
+    /// </summary>
+    /// <param name="currentState">Current game state.</param>
+    /// <returns>True if a decision should be triggered.</returns>
     public bool ShouldTriggerDecision(GameStateSnapshot currentState)
     {
-        var shouldTrigger = false;
-        var reasons = new List<string>();
-
-        // Always trigger on first state
-        if (_previousState == null)
-        {
-            _previousState = currentState;
-            _lastDecisionTime = DateTime.UtcNow;
-            return true;
-        }
-
-        // Check for significant events
-        if (HasNewProjectsAvailable(currentState))
-        {
-            reasons.Add("New project available");
-            shouldTrigger = true;
-        }
-
-        if (HasPhaseChanged(currentState))
-        {
-            reasons.Add($"Phase changed to {currentState.Phase}");
-            shouldTrigger = true;
-        }
-
-        if (HasSignificantResourceChange(currentState))
-        {
-            reasons.Add("Significant resource change");
-            shouldTrigger = true;
-        }
-
-        if (HasNewActionAvailable(currentState))
-        {
-            reasons.Add("New action became available");
-            shouldTrigger = true;
-        }
-
-        // Fallback: trigger every N seconds regardless
-        if ((DateTime.UtcNow - _lastDecisionTime).TotalMilliseconds >= _decisionIntervalMs)
-        {
-            reasons.Add("Scheduled interval");
-            shouldTrigger = true;
-        }
+        var (shouldTrigger, reasons) = EvaluateTriggers(currentState);
 
         if (shouldTrigger)
         {
+            _logger?.LogDebug("Decision triggered: {Reasons}", string.Join(", ", reasons));
             _previousState = currentState;
             _lastDecisionTime = DateTime.UtcNow;
         }
@@ -68,16 +43,34 @@ public sealed class EventDetector
         return shouldTrigger;
     }
 
+    /// <summary>
+    /// Gets the reasons why a decision would be triggered for the current state.
+    /// Does not update internal state.
+    /// </summary>
+    /// <param name="currentState">Current game state.</param>
+    /// <returns>List of trigger reasons.</returns>
     public List<string> GetTriggerReasons(GameStateSnapshot currentState)
+    {
+        var (_, reasons) = EvaluateTriggers(currentState);
+        return reasons;
+    }
+
+    /// <summary>
+    /// Evaluates all trigger conditions and returns both the result and reasons.
+    /// This is the single source of truth for trigger logic.
+    /// </summary>
+    private (bool ShouldTrigger, List<string> Reasons) EvaluateTriggers(GameStateSnapshot currentState)
     {
         var reasons = new List<string>();
 
+        // Always trigger on first state
         if (_previousState == null)
         {
             reasons.Add("Initial state");
-            return reasons;
+            return (true, reasons);
         }
 
+        // Check for significant events
         if (HasNewProjectsAvailable(currentState))
             reasons.Add("New project available");
 
@@ -90,10 +83,11 @@ public sealed class EventDetector
         if (HasNewActionAvailable(currentState))
             reasons.Add("New action became available");
 
+        // Fallback: trigger every N seconds regardless
         if ((DateTime.UtcNow - _lastDecisionTime).TotalMilliseconds >= _decisionIntervalMs)
             reasons.Add("Scheduled interval");
 
-        return reasons;
+        return (reasons.Count > 0, reasons);
     }
 
     private bool HasNewProjectsAvailable(GameStateSnapshot current)

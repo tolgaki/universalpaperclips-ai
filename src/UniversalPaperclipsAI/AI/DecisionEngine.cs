@@ -20,18 +20,40 @@ public sealed class DecisionEngine
     private readonly OpenAISettings _settings;
     private readonly PromptBuilder _promptBuilder;
     private readonly ChatClient _client;
-    private readonly List<DecisionLogEntry> _decisionHistory = new();
+    private readonly LinkedList<DecisionLogEntry> _decisionHistory = new();
+    private readonly object _historyLock = new();
+    private readonly SemaphoreSlim _rateLimiter = new(1, 1);
+    private DateTime _lastRequestTime = DateTime.MinValue;
     private readonly ILogger<DecisionEngine>? _logger;
 
     /// <summary>
     /// Gets the decision history (limited to last <see cref="MaxHistorySize"/> entries).
+    /// Returns a snapshot copy for thread safety.
     /// </summary>
-    public IReadOnlyList<DecisionLogEntry> DecisionHistory => _decisionHistory;
+    public IReadOnlyList<DecisionLogEntry> DecisionHistory
+    {
+        get
+        {
+            lock (_historyLock)
+            {
+                return _decisionHistory.ToList();
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the most recent decision, if any.
     /// </summary>
-    public DecisionLogEntry? LastDecision => _decisionHistory.LastOrDefault();
+    public DecisionLogEntry? LastDecision
+    {
+        get
+        {
+            lock (_historyLock)
+            {
+                return _decisionHistory.Last?.Value;
+            }
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the DecisionEngine.
@@ -46,7 +68,7 @@ public sealed class DecisionEngine
 
         _settings = settings;
         _logger = logger;
-        _promptBuilder = new PromptBuilder();
+        _promptBuilder = new PromptBuilder(); // Logger can be added via DI if needed
 
         var apiKey = !string.IsNullOrEmpty(settings.ApiKey)
             ? settings.ApiKey
@@ -83,7 +105,7 @@ public sealed class DecisionEngine
         var options = new ChatCompletionOptions
         {
             MaxOutputTokenCount = _settings.MaxTokens,
-            Temperature = 0.7f
+            Temperature = _settings.Temperature
         };
 
         // Retry logic with exponential backoff
@@ -93,6 +115,9 @@ public sealed class DecisionEngine
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Rate limiting to prevent API throttling
+                await EnforceRateLimitAsync(cancellationToken);
 
                 var response = await _client.CompleteChatAsync(messages, options, cancellationToken);
                 var content = response.Value.Content[0].Text;
@@ -112,12 +137,16 @@ public sealed class DecisionEngine
                     RawResponse = content
                 };
 
-                _decisionHistory.Add(logEntry);
-
-                // Prune history to prevent memory leak (Issue #1)
-                while (_decisionHistory.Count > MaxHistorySize)
+                // Thread-safe history management with O(1) pruning
+                lock (_historyLock)
                 {
-                    _decisionHistory.RemoveAt(0);
+                    _decisionHistory.AddLast(logEntry);
+
+                    // Prune history to prevent memory leak
+                    while (_decisionHistory.Count > MaxHistorySize)
+                    {
+                        _decisionHistory.RemoveFirst();
+                    }
                 }
 
                 return decision;
@@ -150,6 +179,33 @@ public sealed class DecisionEngine
         };
     }
 
+    /// <summary>
+    /// Enforces rate limiting to prevent API throttling.
+    /// Ensures minimum interval between API calls.
+    /// </summary>
+    private async Task EnforceRateLimitAsync(CancellationToken cancellationToken)
+    {
+        await _rateLimiter.WaitAsync(cancellationToken);
+        try
+        {
+            var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
+            var minInterval = TimeSpan.FromMilliseconds(_settings.MinRequestIntervalMs);
+
+            if (timeSinceLastRequest < minInterval)
+            {
+                var delay = minInterval - timeSinceLastRequest;
+                _logger?.LogDebug("Rate limiting: waiting {DelayMs}ms before next API call", delay.TotalMilliseconds);
+                await Task.Delay(delay, cancellationToken);
+            }
+
+            _lastRequestTime = DateTime.UtcNow;
+        }
+        finally
+        {
+            _rateLimiter.Release();
+        }
+    }
+
     private LLMDecision ParseResponse(string content)
     {
         try
@@ -179,8 +235,7 @@ public sealed class DecisionEngine
         }
         catch (JsonException ex)
         {
-            Console.WriteLine($"Failed to parse LLM response: {ex.Message}");
-            Console.WriteLine($"Raw response: {content}");
+            _logger?.LogWarning(ex, "Failed to parse LLM response. Raw response: {RawResponse}", content);
 
             return new LLMDecision
             {
@@ -216,8 +271,13 @@ public sealed class DecisionEngine
                $"Funds: ${state.Resources.Funds:N2}, Wire: {state.Resources.Wire:N0}";
     }
 
-    public IEnumerable<DecisionLogEntry> GetRecentDecisions(int count = 5) =>
-        _decisionHistory.TakeLast(count);
+    public IEnumerable<DecisionLogEntry> GetRecentDecisions(int count = 5)
+    {
+        lock (_historyLock)
+        {
+            return _decisionHistory.TakeLast(count).ToList();
+        }
+    }
 }
 
 public class LLMDecision

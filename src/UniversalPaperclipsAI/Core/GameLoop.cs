@@ -61,7 +61,7 @@ public sealed class GameLoop : IDisposable
 
         _observer = new GameStateObserver(browser.Page, logger: null);
         _eventDetector = new EventDetector(gameSettings.DecisionIntervalMs);
-        _actionExecutor = new ActionExecutor(browser);
+        _actionExecutor = new ActionExecutor(browser, gameSettings.MaxActionsPerDecision);
         _consoleRenderer = new ConsoleRenderer();
         _browserOverlay = new BrowserOverlay(browser);
     }
@@ -141,8 +141,8 @@ public sealed class GameLoop : IDisposable
                     _consoleRenderer.LogDecision(_decisionEngine.LastDecision);
                 }
 
-                // Execute the actions (with cancellation support)
-                await _actionExecutor.ExecuteBatchAsync(decision.Actions, cancellationToken);
+                // Execute the actions with validation (with cancellation support)
+                await _actionExecutor.ExecuteBatchAsync(decision.Actions, state.AvailableActions, cancellationToken);
 
                 // Update overlay
                 if (_displaySettings.OverlayEnabled)

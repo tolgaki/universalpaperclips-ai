@@ -7,6 +7,16 @@ namespace UniversalPaperclipsAI.GameState;
 /// <summary>
 /// Extracts game state from the browser DOM.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This class does not own the <see cref="IPage"/> instance and does not implement
+/// <see cref="IDisposable"/>. The caller (typically <see cref="Browser.BrowserController"/>)
+/// is responsible for managing the page lifecycle.
+/// </para>
+/// <para>
+/// The observer should not be used after the page has been closed or disposed.
+/// </para>
+/// </remarks>
 public sealed class GameStateObserver
 {
     private readonly IPage _page;
@@ -15,7 +25,10 @@ public sealed class GameStateObserver
     /// <summary>
     /// Initializes a new instance of the GameStateObserver.
     /// </summary>
-    /// <param name="page">Playwright page instance.</param>
+    /// <param name="page">
+    /// Playwright page instance. The caller retains ownership and is responsible
+    /// for the page lifecycle. This observer should not be used after the page is closed.
+    /// </param>
     /// <param name="logger">Optional logger for diagnostics.</param>
     public GameStateObserver(IPage page, ILogger<GameStateObserver>? logger = null)
     {

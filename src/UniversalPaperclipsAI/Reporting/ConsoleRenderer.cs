@@ -3,6 +3,7 @@ using Spectre.Console.Rendering;
 using UniversalPaperclipsAI.Actions;
 using UniversalPaperclipsAI.AI;
 using UniversalPaperclipsAI.GameState;
+using UniversalPaperclipsAI.Utilities;
 
 namespace UniversalPaperclipsAI.Reporting;
 
@@ -13,6 +14,11 @@ public sealed class ConsoleRenderer
 {
     private readonly object _lock = new();
     private readonly DateTime _startTime = DateTime.UtcNow;
+    private bool _isFirstRender = true;
+
+    // ANSI escape codes for cursor control (reduces flicker vs Console.Clear)
+    private const string CursorHome = "\u001b[H";        // Move cursor to home position (0,0)
+    private const string ClearToEndOfScreen = "\u001b[J"; // Clear from cursor to end of screen
 
     public void RenderDashboard(
         GameStateSnapshot state,
@@ -21,8 +27,22 @@ public sealed class ConsoleRenderer
     {
         lock (_lock)
         {
-            Console.Clear();
+            // Only clear on first render; subsequent renders use cursor repositioning
+            if (_isFirstRender)
+            {
+                Console.Clear();
+                _isFirstRender = false;
+            }
+            else
+            {
+                // Move cursor to top-left without clearing (reduces flicker)
+                Console.Write(CursorHome);
+            }
+
             AnsiConsole.Write(CreateDashboard(state, lastDecision, recentActions));
+
+            // Clear any leftover content from previous longer renders
+            Console.Write(ClearToEndOfScreen);
         }
     }
 
@@ -200,7 +220,7 @@ public sealed class ConsoleRenderer
         content.Add(new Markup($"[bold cyan]Priority:[/] {lastDecision.Priority}"));
         content.Add(new Markup(""));
         content.Add(new Markup($"[bold yellow]Reasoning:[/]"));
-        content.Add(new Markup($"[white]{Truncate(lastDecision.Reasoning, 200)}[/]"));
+        content.Add(new Markup($"[white]{StringSanitizer.Truncate(lastDecision.Reasoning, 200)}[/]"));
         content.Add(new Markup(""));
         content.Add(new Markup($"[bold green]Actions ({lastDecision.Actions.Count}):[/]"));
 
@@ -246,13 +266,6 @@ public sealed class ConsoleRenderer
         return new Panel(table)
             .Header("[bold blue] Action History [/]")
             .Border(BoxBorder.Rounded);
-    }
-
-    private static string Truncate(string text, int maxLength)
-    {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-            return text;
-        return text[..(maxLength - 3)] + "...";
     }
 
     public void LogMessage(string message, string color = "white")

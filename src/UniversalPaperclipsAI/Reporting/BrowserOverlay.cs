@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using UniversalPaperclipsAI.AI;
 using UniversalPaperclipsAI.Browser;
 using UniversalPaperclipsAI.GameState;
+using UniversalPaperclipsAI.Utilities;
 
 namespace UniversalPaperclipsAI.Reporting;
 
@@ -135,17 +136,17 @@ public sealed class BrowserOverlay
             {
                 // Update priority
                 await _browser.UpdateOverlayContentAsync("ai-priority",
-                    $"🎯 {EscapeHtml(lastDecision.Priority)}");
+                    $"🎯 {StringSanitizer.EscapeHtml(lastDecision.Priority)}");
 
                 // Update reasoning
-                var reasoning = Truncate(lastDecision.Reasoning, 150);
+                var reasoning = StringSanitizer.Truncate(lastDecision.Reasoning, 150);
                 await _browser.UpdateOverlayContentAsync("ai-reasoning",
-                    $"💭 {EscapeHtml(reasoning)}");
+                    $"💭 {StringSanitizer.EscapeHtml(reasoning)}");
 
                 // Update actions
                 var actionsHtml = string.Join("",
                     lastDecision.Actions.Take(5).Select(a =>
-                        $"<div class='action-item'>{EscapeHtml(a.Type)}</div>"));
+                        $"<div class='action-item'>{StringSanitizer.EscapeHtml(a.Type)}</div>"));
                 await _browser.UpdateOverlayContentAsync("ai-action-list", actionsHtml);
             }
         }
@@ -153,22 +154,5 @@ public sealed class BrowserOverlay
         {
             _logger?.LogDebug(ex, "Error updating overlay");
         }
-    }
-
-    private static string EscapeHtml(string text)
-    {
-        return text
-            .Replace("&", "&amp;")
-            .Replace("<", "&lt;")
-            .Replace(">", "&gt;")
-            .Replace("\"", "&quot;")
-            .Replace("'", "&#39;");
-    }
-
-    private static string Truncate(string text, int maxLength)
-    {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-            return text;
-        return text[..(maxLength - 3)] + "...";
     }
 }

@@ -1,12 +1,32 @@
 using System.Text;
-using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using UniversalPaperclipsAI.Actions;
 using UniversalPaperclipsAI.GameState;
 
 namespace UniversalPaperclipsAI.AI;
 
+/// <summary>
+/// Builds prompts for LLM decision-making based on game state.
+/// </summary>
 public class PromptBuilder
 {
+    private readonly ILogger<PromptBuilder>? _logger;
+
+    /// <summary>
+    /// Initializes a new instance of the PromptBuilder.
+    /// </summary>
+    /// <param name="logger">Optional logger for diagnostics.</param>
+    public PromptBuilder(ILogger<PromptBuilder>? logger = null)
+    {
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Builds a decision prompt for the LLM based on current game state.
+    /// </summary>
+    /// <param name="state">Current game state snapshot.</param>
+    /// <param name="recentActions">Recent actions for context.</param>
+    /// <returns>Formatted prompt string.</returns>
     public string BuildDecisionPrompt(GameStateSnapshot state, IEnumerable<ActionLogEntry> recentActions)
     {
         var sb = new StringBuilder();
@@ -111,6 +131,10 @@ public class PromptBuilder
         sb.AppendLine("---");
         sb.AppendLine("Based on the current state, what actions should be taken? Respond with valid JSON only.");
 
-        return sb.ToString();
+        var prompt = sb.ToString();
+        _logger?.LogDebug("Built prompt with {CharCount} characters for phase {Phase}",
+            prompt.Length, state.Phase);
+
+        return prompt;
     }
 }

@@ -28,6 +28,12 @@ public sealed class OpenAISettings
 
     /// <summary>Maximum tokens for API responses.</summary>
     public int MaxTokens { get; set; } = 2000;
+
+    /// <summary>Temperature for LLM responses (0.0 = deterministic, 1.0 = creative). Default: 0.7</summary>
+    public float Temperature { get; set; } = 0.7f;
+
+    /// <summary>Minimum milliseconds between API calls to prevent rate limiting. Default: 1000ms</summary>
+    public int MinRequestIntervalMs { get; set; } = 1000;
 }
 
 /// <summary>

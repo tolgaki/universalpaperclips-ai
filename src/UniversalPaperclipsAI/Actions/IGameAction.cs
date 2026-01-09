@@ -1,16 +1,8 @@
 namespace UniversalPaperclipsAI.Actions;
 
-public interface IGameAction
-{
-    string Name { get; }
-    string Description { get; }
-    Task ExecuteAsync(ActionContext context);
-}
-
-public class ActionContext
-{
-    public required Browser.BrowserController Browser { get; init; }
-    public Dictionary<string, object> Parameters { get; init; } = new();
-}
-
+/// <summary>
+/// Represents the result of executing a game action.
+/// </summary>
+/// <param name="Success">Whether the action succeeded.</param>
+/// <param name="Message">Description of the result or error.</param>
 public record ActionResult(bool Success, string Message);

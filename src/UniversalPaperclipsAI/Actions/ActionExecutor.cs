@@ -11,25 +11,40 @@ public sealed class ActionExecutor
     private const int MaxHistorySize = 500;
     private const int DefaultActionDelayMs = 50;
     private const int RapidClickDelayMs = 10;
+    private const int DefaultMaxActionsPerDecision = 5;
 
     private readonly BrowserController _browser;
-    private readonly List<ActionLogEntry> _actionHistory = new();
+    private readonly int _maxActionsPerDecision;
+    private readonly LinkedList<ActionLogEntry> _actionHistory = new();
+    private readonly object _historyLock = new();
     private readonly ILogger<ActionExecutor>? _logger;
 
     /// <summary>
     /// Gets the action history (limited to last <see cref="MaxHistorySize"/> entries).
+    /// Returns a snapshot copy for thread safety.
     /// </summary>
-    public IReadOnlyList<ActionLogEntry> ActionHistory => _actionHistory;
+    public IReadOnlyList<ActionLogEntry> ActionHistory
+    {
+        get
+        {
+            lock (_historyLock)
+            {
+                return _actionHistory.ToList();
+            }
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the ActionExecutor.
     /// </summary>
     /// <param name="browser">Browser controller for DOM interactions.</param>
+    /// <param name="maxActionsPerDecision">Maximum number of actions to execute per decision batch.</param>
     /// <param name="logger">Optional logger for diagnostics.</param>
-    public ActionExecutor(BrowserController browser, ILogger<ActionExecutor>? logger = null)
+    public ActionExecutor(BrowserController browser, int maxActionsPerDecision = DefaultMaxActionsPerDecision, ILogger<ActionExecutor>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(browser);
         _browser = browser;
+        _maxActionsPerDecision = maxActionsPerDecision > 0 ? maxActionsPerDecision : DefaultMaxActionsPerDecision;
         _logger = logger;
     }
 
@@ -68,7 +83,7 @@ public sealed class ActionExecutor
             {
                 logEntry.Success = false;
                 logEntry.Message = $"Unknown action: {actionName}";
-                _actionHistory.Add(logEntry);
+                AddToHistory(logEntry);
                 return new ActionResult(false, logEntry.Message);
             }
 
@@ -108,12 +123,16 @@ public sealed class ActionExecutor
 
     private void AddToHistory(ActionLogEntry entry)
     {
-        _actionHistory.Add(entry);
-
-        // Prune history to prevent memory leak (Issue #2)
-        while (_actionHistory.Count > MaxHistorySize)
+        // Thread-safe history management with O(1) pruning
+        lock (_historyLock)
         {
-            _actionHistory.RemoveAt(0);
+            _actionHistory.AddLast(entry);
+
+            // Prune history to prevent memory leak
+            while (_actionHistory.Count > MaxHistorySize)
+            {
+                _actionHistory.RemoveFirst();
+            }
         }
     }
 
@@ -141,26 +160,103 @@ public sealed class ActionExecutor
     }
 
     /// <summary>
-    /// Executes a batch of actions sequentially.
+    /// Executes a batch of actions sequentially, limited to MaxActionsPerDecision.
+    /// Actions are validated against the available actions list if provided.
     /// </summary>
     /// <param name="actions">Actions to execute.</param>
+    /// <param name="availableActions">Optional list of available actions to validate against.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task ExecuteBatchAsync(IEnumerable<LLMAction> actions, CancellationToken cancellationToken = default)
+    /// <returns>Number of actions successfully executed.</returns>
+    public async Task<int> ExecuteBatchAsync(
+        IEnumerable<LLMAction> actions,
+        IReadOnlyList<string>? availableActions = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(actions);
 
-        foreach (var action in actions)
+        // Enforce maximum actions per decision to prevent runaway LLM responses
+        var limitedActions = actions.Take(_maxActionsPerDecision);
+        var executedCount = 0;
+
+        foreach (var action in limitedActions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ExecuteAsync(action.Type, action.Parameters);
+
+            // Validate action against available actions if provided
+            if (availableActions != null && !IsActionValid(action.Type, availableActions))
+            {
+                _logger?.LogWarning("Skipping invalid action '{ActionType}' - not in available actions list", action.Type);
+
+                var logEntry = new ActionLogEntry
+                {
+                    Timestamp = DateTime.UtcNow,
+                    ActionName = action.Type,
+                    Parameters = action.Parameters,
+                    Success = false,
+                    Message = "Action not available in current game state"
+                };
+                AddToHistory(logEntry);
+                continue;
+            }
+
+            var result = await ExecuteAsync(action.Type, action.Parameters);
+            if (result.Success)
+            {
+                executedCount++;
+            }
             await Task.Delay(DefaultActionDelayMs, cancellationToken);
+        }
+
+        return executedCount;
+    }
+
+    /// <summary>
+    /// Validates whether an action is in the available actions list.
+    /// </summary>
+    private static bool IsActionValid(string actionType, IReadOnlyList<string> availableActions)
+    {
+        if (string.IsNullOrWhiteSpace(actionType))
+            return false;
+
+        // Direct match
+        if (availableActions.Contains(actionType))
+            return true;
+
+        // Handle project actions (ActivateProject:projectN matches ActivateProject:projectN in available)
+        if (actionType.StartsWith("ActivateProject:"))
+            return availableActions.Contains(actionType);
+
+        // Handle multi-click variants (MakePaperclip10 should be valid if MakePaperclip is available)
+        if (actionType == "MakePaperclip10" && availableActions.Contains("MakePaperclip"))
+            return true;
+
+        // Known actions that may not be in the dynamic available list but are always valid if the button exists
+        var alwaysValidActions = new HashSet<string>
+        {
+            "SetLowRisk", "SetMediumRisk", "SetHighRisk",
+            "ToggleAutoWire", "ToggleAutoTourney"
+        };
+        if (alwaysValidActions.Contains(actionType))
+            return true;
+
+        return false;
+    }
+
+    public IEnumerable<ActionLogEntry> GetRecentHistory(int count = 10)
+    {
+        lock (_historyLock)
+        {
+            return _actionHistory.TakeLast(count).ToList();
         }
     }
 
-    public IEnumerable<ActionLogEntry> GetRecentHistory(int count = 10) =>
-        _actionHistory.TakeLast(count);
-
-    public void ClearHistory() => _actionHistory.Clear();
+    public void ClearHistory()
+    {
+        lock (_historyLock)
+        {
+            _actionHistory.Clear();
+        }
+    }
 }
 
 public class ActionLogEntry
