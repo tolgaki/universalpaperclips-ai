@@ -133,7 +133,7 @@ public sealed class GameLoop : IDisposable
                     _actionExecutor.GetRecentHistory(),
                     cancellationToken);
 
-                _totalDecisions++;
+                Interlocked.Increment(ref _totalDecisions);
 
                 // Log the decision
                 if (_displaySettings.ShowConsole && _decisionEngine.LastDecision != null)
@@ -161,15 +161,6 @@ public sealed class GameLoop : IDisposable
                     state,
                     _decisionEngine.LastDecision,
                     _actionExecutor.GetRecentHistory());
-            }
-
-            // Update overlay periodically even without new decisions
-            if (_displaySettings.OverlayEnabled && _totalDecisions > 0)
-            {
-                await _browserOverlay.UpdateAsync(
-                    state,
-                    _decisionEngine.LastDecision,
-                    _totalDecisions);
             }
         }
         catch (OperationCanceledException)

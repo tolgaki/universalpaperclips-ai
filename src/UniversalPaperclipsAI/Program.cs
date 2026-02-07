@@ -137,7 +137,7 @@ internal static class Program
         AnsiConsole.WriteLine();
 
         // Create decision engine
-        var decisionEngine = new DecisionEngine(config.OpenAI);
+        using var decisionEngine = new DecisionEngine(config.OpenAI);
         AnsiConsole.MarkupLine("[green]✓[/] AI Decision Engine ready");
 
         // Create and run game loop

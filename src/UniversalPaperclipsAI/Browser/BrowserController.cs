@@ -209,10 +209,8 @@ public class BrowserController : IAsyncDisposable
     /// <param name="css">CSS styles for the overlay.</param>
     public async Task InjectOverlayAsync(string html, string css)
     {
-        // Sanitize inputs to prevent XSS
-        var safeHtml = StringSanitizer.EscapeForJavaScript(html);
-        var safeCss = StringSanitizer.EscapeForJavaScript(css);
-
+        // Playwright's parameterized EvaluateAsync safely serializes arguments as JSON,
+        // so no manual escaping is needed (manual escaping would cause double-escaping).
         await Page.EvaluateAsync(@"({html, css}) => {
             // Remove existing overlay
             const existing = document.getElementById('ai-overlay');
@@ -228,7 +226,7 @@ public class BrowserController : IAsyncDisposable
             overlay.id = 'ai-overlay';
             overlay.innerHTML = html;
             document.body.appendChild(overlay);
-        }", new { html = safeHtml, css = safeCss });
+        }", new { html, css });
     }
 
     /// <summary>
@@ -256,12 +254,12 @@ public class BrowserController : IAsyncDisposable
     public async Task UpdateOverlayTextAsync(string elementId, string text)
     {
         var safeElementId = StringSanitizer.SanitizeElementId(elementId);
-        var safeText = StringSanitizer.EscapeHtml(text);
-
+        // textContent is already text-safe (treats input as plain text, not HTML),
+        // so HTML-escaping is unnecessary and would cause entities to display literally.
         await Page.EvaluateAsync(@"({elementId, text}) => {
             const el = document.getElementById(elementId);
             if (el) el.textContent = text;
-        }", new { elementId = safeElementId, text = safeText });
+        }", new { elementId = safeElementId, text });
     }
 
     public async ValueTask DisposeAsync()

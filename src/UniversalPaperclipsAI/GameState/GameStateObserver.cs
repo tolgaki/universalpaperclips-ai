@@ -326,35 +326,48 @@ public sealed class GameStateObserver
         return actions;
     }
 
-    /// <summary>
-    /// Gets a value from the data dictionary and converts it to the specified type.
-    /// </summary>
-    private static T GetValue<T>(Dictionary<string, object?> data, string key, T defaultValue = default!) where T : struct
+    private static long GetLong(Dictionary<string, object?> data, string key)
     {
         if (!data.TryGetValue(key, out var val) || val == null)
-            return defaultValue;
-
-        try
-        {
-            return (T)Convert.ChangeType(val, typeof(T));
-        }
-        catch
-        {
-            return defaultValue;
-        }
+            return 0;
+        if (val is System.Text.Json.JsonElement elem)
+            return elem.ValueKind == System.Text.Json.JsonValueKind.Number ? (long)elem.GetDouble() : 0;
+        try { return Convert.ToInt64(val); } catch { return 0; }
     }
 
-    private static long GetLong(Dictionary<string, object?> data, string key) =>
-        GetValue<long>(data, key);
+    private static int GetInt(Dictionary<string, object?> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val) || val == null)
+            return 0;
+        if (val is System.Text.Json.JsonElement elem)
+            return elem.ValueKind == System.Text.Json.JsonValueKind.Number ? (int)elem.GetDouble() : 0;
+        try { return Convert.ToInt32(val); } catch { return 0; }
+    }
 
-    private static int GetInt(Dictionary<string, object?> data, string key) =>
-        GetValue<int>(data, key);
+    private static double GetDouble(Dictionary<string, object?> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val) || val == null)
+            return 0;
+        if (val is System.Text.Json.JsonElement elem)
+            return elem.ValueKind == System.Text.Json.JsonValueKind.Number ? elem.GetDouble() : 0;
+        try { return Convert.ToDouble(val); } catch { return 0; }
+    }
 
-    private static double GetDouble(Dictionary<string, object?> data, string key) =>
-        GetValue<double>(data, key);
-
-    private static bool GetBool(Dictionary<string, object?> data, string key) =>
-        GetValue<bool>(data, key);
+    private static bool GetBool(Dictionary<string, object?> data, string key)
+    {
+        if (!data.TryGetValue(key, out var val) || val == null)
+            return false;
+        if (val is System.Text.Json.JsonElement elem)
+        {
+            return elem.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
+                _ => false
+            };
+        }
+        try { return Convert.ToBoolean(val); } catch { return false; }
+    }
 
     private static bool GetButtonEnabled(Dictionary<string, object?> data, string key)
     {

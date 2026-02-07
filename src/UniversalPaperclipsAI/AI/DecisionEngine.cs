@@ -11,7 +11,7 @@ namespace UniversalPaperclipsAI.AI;
 /// <summary>
 /// Orchestrates LLM decision-making for game actions.
 /// </summary>
-public sealed class DecisionEngine
+public sealed class DecisionEngine : IDisposable
 {
     private const int MaxHistorySize = 100;
     private const int MaxRetryAttempts = 3;
@@ -277,6 +277,11 @@ public sealed class DecisionEngine
         {
             return _decisionHistory.TakeLast(count).ToList();
         }
+    }
+
+    public void Dispose()
+    {
+        _rateLimiter.Dispose();
     }
 }
 

@@ -217,16 +217,16 @@ public sealed class ConsoleRenderer
 
         var content = new List<IRenderable>();
 
-        content.Add(new Markup($"[bold cyan]Priority:[/] {lastDecision.Priority}"));
+        content.Add(new Markup($"[bold cyan]Priority:[/] {Markup.Escape(lastDecision.Priority)}"));
         content.Add(new Markup(""));
         content.Add(new Markup($"[bold yellow]Reasoning:[/]"));
-        content.Add(new Markup($"[white]{StringSanitizer.Truncate(lastDecision.Reasoning, 200)}[/]"));
+        content.Add(new Markup($"[white]{Markup.Escape(StringSanitizer.Truncate(lastDecision.Reasoning, 200))}[/]"));
         content.Add(new Markup(""));
         content.Add(new Markup($"[bold green]Actions ({lastDecision.Actions.Count}):[/]"));
 
         foreach (var action in lastDecision.Actions.Take(5))
         {
-            content.Add(new Markup($"  [cyan]→[/] {action.Type}"));
+            content.Add(new Markup($"  [cyan]→[/] {Markup.Escape(action.Type)}"));
         }
 
         return new Panel(new Rows(content))
@@ -272,7 +272,7 @@ public sealed class ConsoleRenderer
     {
         lock (_lock)
         {
-            AnsiConsole.MarkupLine($"[{color}]{message}[/]");
+            AnsiConsole.MarkupLine($"[{color}]{Markup.Escape(message)}[/]");
         }
     }
 
@@ -281,9 +281,9 @@ public sealed class ConsoleRenderer
         lock (_lock)
         {
             AnsiConsole.MarkupLine($"[cyan]═══ AI Decision ═══[/]");
-            AnsiConsole.MarkupLine($"[yellow]Priority:[/] {decision.Priority}");
-            AnsiConsole.MarkupLine($"[white]Reasoning:[/] {decision.Reasoning}");
-            AnsiConsole.MarkupLine($"[green]Actions:[/] {string.Join(", ", decision.Actions.Select(a => a.Type))}");
+            AnsiConsole.MarkupLine($"[yellow]Priority:[/] {Markup.Escape(decision.Priority)}");
+            AnsiConsole.MarkupLine($"[white]Reasoning:[/] {Markup.Escape(decision.Reasoning)}");
+            AnsiConsole.MarkupLine($"[green]Actions:[/] {Markup.Escape(string.Join(", ", decision.Actions.Select(a => a.Type)))}");
             AnsiConsole.MarkupLine($"[cyan]══════════════════[/]");
         }
     }

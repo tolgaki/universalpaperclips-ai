@@ -210,6 +210,12 @@ public sealed class ActionExecutor
         return executedCount;
     }
 
+    private static readonly HashSet<string> AlwaysValidActions = new()
+    {
+        "SetLowRisk", "SetMediumRisk", "SetHighRisk",
+        "ToggleAutoWire", "ToggleAutoTourney"
+    };
+
     /// <summary>
     /// Validates whether an action is in the available actions list.
     /// </summary>
@@ -231,12 +237,7 @@ public sealed class ActionExecutor
             return true;
 
         // Known actions that may not be in the dynamic available list but are always valid if the button exists
-        var alwaysValidActions = new HashSet<string>
-        {
-            "SetLowRisk", "SetMediumRisk", "SetHighRisk",
-            "ToggleAutoWire", "ToggleAutoTourney"
-        };
-        if (alwaysValidActions.Contains(actionType))
+        if (AlwaysValidActions.Contains(actionType))
             return true;
 
         return false;
