@@ -76,11 +76,8 @@ public class BrowserController : IAsyncDisposable
             ViewportSize = new ViewportSize { Width = DefaultViewportWidth, Height = DefaultViewportHeight }
         });
 
-        // Validate URL scheme (Issue #30)
-        if (!_settings.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger?.LogWarning("Game URL is not using HTTPS: {Url}", _settings.Url);
-        }
+        // Validate URL scheme — block dangerous schemes (Issue #30)
+        ValidateUrlScheme(_settings.Url);
 
         // Navigate to the game
         _logger?.LogInformation("Navigating to {Url}...", _settings.Url);
@@ -260,6 +257,30 @@ public class BrowserController : IAsyncDisposable
             const el = document.getElementById(elementId);
             if (el) el.textContent = text;
         }", new { elementId = safeElementId, text });
+    }
+
+    private static readonly string[] AllowedUrlSchemes = ["https", "http"];
+
+    /// <summary>
+    /// Validates the URL uses a safe scheme. Blocks javascript:, file:, data:, etc.
+    /// </summary>
+    private void ValidateUrlScheme(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            throw new ArgumentException($"Invalid URL: {url}");
+        }
+
+        if (!AllowedUrlSchemes.Contains(uri.Scheme, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"URL scheme '{uri.Scheme}' is not allowed. Only HTTP and HTTPS URLs are permitted.");
+        }
+
+        if (!string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger?.LogWarning("Game URL is not using HTTPS: {Url}", url);
+        }
     }
 
     public async ValueTask DisposeAsync()

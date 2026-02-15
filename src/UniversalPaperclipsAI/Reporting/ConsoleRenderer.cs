@@ -258,7 +258,7 @@ public sealed class ConsoleRenderer
 
             table.AddRow(
                 $"[grey]{action.Timestamp:HH:mm:ss}[/]",
-                $"[cyan]{action.ActionName}[/]",
+                $"[cyan]{Markup.Escape(action.ActionName)}[/]",
                 $"[{statusColor}]{status}[/]"
             );
         }

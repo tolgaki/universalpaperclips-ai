@@ -276,6 +276,7 @@ public sealed class GameStateObserver
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Error capturing game state");
+            state.CaptureError = ex.Message;
         }
 
         return state;

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using UniversalPaperclipsAI.Browser;
 
@@ -6,7 +7,7 @@ namespace UniversalPaperclipsAI.Actions;
 /// <summary>
 /// Executes game actions through browser automation.
 /// </summary>
-public sealed class ActionExecutor
+public sealed partial class ActionExecutor
 {
     private const int MaxHistorySize = 500;
     private const int DefaultActionDelayMs = 50;
@@ -87,29 +88,33 @@ public sealed class ActionExecutor
                 return new ActionResult(false, logEntry.Message);
             }
 
-            // Execute the action
+            // Execute the action and track actual results
             if (action.IsSlider)
             {
-                await _browser.SetSliderAsync(action.Selector, action.SliderValue);
-                logEntry.Success = true;
-                logEntry.Message = $"Set slider to {action.SliderValue}";
+                var sliderResult = await _browser.SetSliderAsync(action.Selector, action.SliderValue);
+                logEntry.Success = sliderResult;
+                logEntry.Message = sliderResult
+                    ? $"Set slider to {action.SliderValue}"
+                    : $"Failed to set slider for {actionName}";
             }
             else
             {
+                int successfulClicks = 0;
                 for (int i = 0; i < action.ClickCount; i++)
                 {
-                    await _browser.ClickIfEnabledAsync(action.Selector);
+                    var clicked = await _browser.ClickIfEnabledAsync(action.Selector);
+                    if (clicked) successfulClicks++;
                     if (action.ClickCount > 1)
                         await Task.Delay(RapidClickDelayMs);
                 }
-                logEntry.Success = true;
+                logEntry.Success = successfulClicks > 0;
                 logEntry.Message = action.ClickCount > 1
-                    ? $"Clicked {action.ClickCount} times"
-                    : "Clicked";
+                    ? $"Clicked {successfulClicks}/{action.ClickCount} times"
+                    : (successfulClicks > 0 ? "Clicked" : "Click failed — element not available");
             }
 
             AddToHistory(logEntry);
-            return new ActionResult(true, logEntry.Message);
+            return new ActionResult(logEntry.Success, logEntry.Message);
         }
         catch (Exception ex)
         {
@@ -136,18 +141,39 @@ public sealed class ActionExecutor
         }
     }
 
+    /// <summary>
+    /// Validates that a project ID is safe for use in a CSS selector.
+    /// Project IDs from the game DOM follow the pattern "projectN" (e.g., project1, project42).
+    /// </summary>
+    private static bool IsValidProjectId(string projectId) =>
+        SafeProjectIdRegex().IsMatch(projectId);
+
+    [GeneratedRegex(@"^project\d+$")]
+    private static partial Regex SafeProjectIdRegex();
+
     private async Task<ActionResult> ExecuteProjectActivationAsync(string projectId, ActionLogEntry logEntry)
     {
+        // Validate project ID to prevent CSS selector injection
+        if (!IsValidProjectId(projectId))
+        {
+            logEntry.Success = false;
+            logEntry.Message = $"Invalid project ID format: {projectId}";
+            _logger?.LogWarning("Rejected project activation with invalid ID: {ProjectId}", projectId);
+            AddToHistory(logEntry);
+            return new ActionResult(false, logEntry.Message);
+        }
+
         try
         {
-            // Projects have dynamic IDs like "project1", "project2", etc.
             var selector = $"#{projectId}";
-            await _browser.ClickIfEnabledAsync(selector);
+            var clicked = await _browser.ClickIfEnabledAsync(selector);
 
-            logEntry.Success = true;
-            logEntry.Message = $"Activated project: {projectId}";
+            logEntry.Success = clicked;
+            logEntry.Message = clicked
+                ? $"Activated project: {projectId}"
+                : $"Project not clickable: {projectId}";
             AddToHistory(logEntry);
-            return new ActionResult(true, logEntry.Message);
+            return new ActionResult(clicked, logEntry.Message);
         }
         catch (Exception ex)
         {
