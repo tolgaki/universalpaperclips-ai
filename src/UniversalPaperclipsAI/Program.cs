@@ -62,7 +62,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Fatal error: {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]Fatal error: {Markup.Escape(ex.Message)}[/]");
             AnsiConsole.WriteException(ex);
             return 1;
         }
@@ -109,14 +109,25 @@ internal static class Program
             AnsiConsole.MarkupLine("[yellow]Warning: Poll interval is very low, this may cause high CPU usage.[/]");
         }
 
+        // Validate configuration bounds
+        var configErrors = ConfigurationValidator.Validate(config);
+        foreach (var error in configErrors)
+        {
+            AnsiConsole.MarkupLine($"[red]Config error: {Markup.Escape(error)}[/]");
+        }
+        if (configErrors.Count > 0)
+        {
+            return 1;
+        }
+
         return 0;
     }
 
     private static void PrintConfiguration(AppConfiguration config)
     {
         AnsiConsole.MarkupLine("[green]✓[/] Configuration loaded");
-        AnsiConsole.MarkupLine($"[green]✓[/] OpenAI Model: {config.OpenAI.Model}");
-        AnsiConsole.MarkupLine($"[green]✓[/] Game URL: {config.Game.Url}");
+        AnsiConsole.MarkupLine($"[green]✓[/] OpenAI Model: {Markup.Escape(config.OpenAI.Model)}");
+        AnsiConsole.MarkupLine($"[green]✓[/] Game URL: {Markup.Escape(config.Game.Url)}");
         AnsiConsole.MarkupLine($"[green]✓[/] Decision Interval: {config.Game.DecisionIntervalMs}ms");
         AnsiConsole.WriteLine();
     }

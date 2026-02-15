@@ -115,6 +115,17 @@ public sealed class GameLoop : IDisposable
             // Capture current game state
             var state = await _observer.CaptureStateAsync();
 
+            // Skip decisions when state capture failed — data may be incomplete/stale
+            if (state.CaptureError != null)
+            {
+                _logger?.LogWarning("Skipping tick due to state capture error: {Error}", state.CaptureError);
+                if (_displaySettings.ShowConsole)
+                {
+                    _consoleRenderer.LogMessage($"State capture error: {state.CaptureError}", "red");
+                }
+                return;
+            }
+
             // Check if we should trigger a decision
             if (_eventDetector.ShouldTriggerDecision(state))
             {

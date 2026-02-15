@@ -55,6 +55,38 @@ public sealed class GameSettings
 }
 
 /// <summary>
+/// Validates configuration values and returns a list of error messages.
+/// Returns an empty list if all values are valid.
+/// </summary>
+public static class ConfigurationValidator
+{
+    public static List<string> Validate(AppConfiguration config)
+    {
+        var errors = new List<string>();
+
+        if (config.OpenAI.MaxTokens <= 0)
+            errors.Add($"OpenAI.MaxTokens must be positive (got {config.OpenAI.MaxTokens})");
+
+        if (config.OpenAI.Temperature < 0f || config.OpenAI.Temperature > 2f)
+            errors.Add($"OpenAI.Temperature must be between 0.0 and 2.0 (got {config.OpenAI.Temperature})");
+
+        if (config.OpenAI.MinRequestIntervalMs < 0)
+            errors.Add($"OpenAI.MinRequestIntervalMs cannot be negative (got {config.OpenAI.MinRequestIntervalMs})");
+
+        if (config.Game.PollIntervalMs <= 0)
+            errors.Add($"Game.PollIntervalMs must be positive (got {config.Game.PollIntervalMs})");
+
+        if (config.Game.DecisionIntervalMs <= 0)
+            errors.Add($"Game.DecisionIntervalMs must be positive (got {config.Game.DecisionIntervalMs})");
+
+        if (config.Game.MaxActionsPerDecision <= 0)
+            errors.Add($"Game.MaxActionsPerDecision must be positive (got {config.Game.MaxActionsPerDecision})");
+
+        return errors;
+    }
+}
+
+/// <summary>
 /// Display and UI configuration settings.
 /// </summary>
 public sealed class DisplaySettings

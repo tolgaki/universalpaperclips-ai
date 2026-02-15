@@ -16,6 +16,12 @@ public class GameStateSnapshot
     public List<string> AvailableActions { get; set; } = new();
     public List<string> RecentMessages { get; set; } = new();
 
+    /// <summary>
+    /// If non-null, the state capture failed and this contains the error message.
+    /// Decisions should not be made on states with capture errors.
+    /// </summary>
+    public string? CaptureError { get; set; }
+
     public string ToSummary() => $"""
         === Game State ({Timestamp:HH:mm:ss}) ===
         Phase: {Phase}

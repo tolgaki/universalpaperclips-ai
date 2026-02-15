@@ -120,7 +120,12 @@ public sealed class DecisionEngine : IDisposable
                 await EnforceRateLimitAsync(cancellationToken);
 
                 var response = await _client.CompleteChatAsync(messages, options, cancellationToken);
-                var content = response.Value.Content[0].Text;
+                var contentParts = response.Value?.Content;
+                if (contentParts == null || contentParts.Count == 0 || string.IsNullOrEmpty(contentParts[0].Text))
+                {
+                    throw new InvalidOperationException("LLM returned an empty response");
+                }
+                var content = contentParts[0].Text;
 
                 // Parse the JSON response
                 var decision = ParseResponse(content);
@@ -170,10 +175,15 @@ public sealed class DecisionEngine : IDisposable
 
         _logger?.LogError(lastException, "All {MaxAttempts} decision attempts failed", MaxRetryAttempts);
 
-        // Return a safe default decision after all retries exhausted
+        // Return a safe default decision after all retries exhausted.
+        // Use only the exception type, not the full message, to avoid leaking
+        // sensitive data (e.g. API keys) that may appear in error details.
+        var safeErrorDescription = lastException != null
+            ? $"{lastException.GetType().Name}"
+            : "Unknown error";
         return new LLMDecision
         {
-            Reasoning = $"Error after {MaxRetryAttempts} attempts: {lastException?.Message}. Taking safe default action.",
+            Reasoning = $"Error after {MaxRetryAttempts} attempts ({safeErrorDescription}). Taking safe default action.",
             Actions = GetSafeDefaultActions(state),
             Priority = "Recovery from error"
         };
